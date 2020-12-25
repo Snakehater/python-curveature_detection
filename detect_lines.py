@@ -1,11 +1,11 @@
 
 import numpy as np
-from PIL import Image, ImageFilter
+from PIL import Image, ImageFilter, ImageDraw
 from scipy import ndimage
 from scipy import signal
-from math import sin, cos, pi
+from math import sin, cos, tan, pi, sqrt, ceil
 
-imageStr = "Untitled.jpg"
+imageStr = "ONEPIX.jpg"
 im = Image.open(imageStr)
 #imageArr = np.array(im)
 
@@ -33,11 +33,16 @@ horr_img = signal.correlate(imgArr, edge_filter_H).astype(np.uint8)
 row, col = horr_img.shape[0], horr_img.shape[1]
 BWimg = np.zeros(shape=(row, col))
 
+horr_img = np.array(im)
+
 for i, row in enumerate(horr_img):
         for j, pixel in enumerate(row):
             #print(pixel)
             pixelAvg = (int(pixel[0]) + int(pixel[1]) + int(pixel[2]))/3
             #print(pixelAvg)
+            if pixelAvg > 0:
+                pass
+                print(pixelAvg)
             if pixelAvg > 127:
                 BWimg[i][j] = int(1)
             else:
@@ -45,59 +50,121 @@ for i, row in enumerate(horr_img):
 
 #print(horr_img.astype(np.uint8))
 
+##############################################################################
+##############################################################################
+##############################################################################
+##########################       Algorithm        ############################
+##############################################################################
+##############################################################################
+##############################################################################
+##############################################################################
 ## hough space, ie line detection
-
-def build_hough_space_fom_image(img, shape = BWimg.shape, val = 1):
-    hough_space = np.zeros(shape)
-    for i, row in enumerate(img):
-        for j, pixel in enumerate(row):   
-            if int(pixel) != val : 
-                continue
-            hough_space = add_to_hough_space_polar((i,j), hough_space)
+print("doing algorithm")
+# def build_hough_space_fom_image(img, shape = BWimg.shape, val = 1):
+#     hough_space = np.zeros(shape)
+#     for i, row in enumerate(img):
+#         for j, pixel in enumerate(row): 
+#             if pixel != val : 
+#                 continue
+#             print(pixel)
+#             hough_space = add_to_hough_space_polar((i,j), hough_space)
+#     return hough_space
+# def add_to_hough_space_polar(p, feature_space):
+#     space = np.linspace(0, pi, len(feature_space))
+#     d_max = len(feature_space[0]) / 2
+#     for i in range(len(space)):
+#         theta = space[i]
+#         d = int(p[0] * sin(theta) + p[1] * cos(theta)) + d_max
+#         if (d >= d_max * 2) : continue
+#         feature_space[i, int(d)] += 1
+#     return feature_space
+global diagonal
+def my_algorithm(img, shape = BWimg.shape, val = 1):
+    global diagonal
+    w = shape[0]
+    h = shape[0]
+    diagonal = ceil(sqrt(w**2 + h**2)) # diagonal will be used later and added to all distances to support a negative distance even inside array.
+    hough_space = np.zeros((360, diagonal * 2))
+    for x, column in enumerate(img): # iterate over x and get columns
+        for y, pixel in enumerate(column): # iterate over y and get rows of each column
+            if pixel > 0: # if there is a bright pixel:
+                print(pixel, "Is positive at x:", x, "y:", y)
+                hough_space = add_pixel_to_houghspace(x, y, hough_space, diagonal) # add to hough space
     return hough_space
-def add_to_hough_space_polar(p, feature_space):
-    space = np.linspace(0, pi, len(feature_space))
-    d_max = len(feature_space[0]) / 2
-    for i in range(len(space)):
-        theta = space[i]
-        d = int(p[0] * sin(theta) + p[1] * cos(theta)) + d_max # d = x * cos(θ) +y * sin(θ), sometimes used 'p' instead of 'd'
-        if (d >= d_max * 2) : continue
-        # print(i, int(d))
-        feature_space[i, int(d)] += 1
-    return feature_space
+
+def add_pixel_to_houghspace(x, y, hough_space, diagonal):
+    for theta in range(360):
+        d = int(x * sin(theta) + y * cos(theta)) + diagonal
+        hough_space[theta, d] += 1 ## add one vote to that position in hough space
+        ## these votes will later give a spot in hough space where there are a lot of intersections
+    return hough_space
+
+
+
+def algorithm(img):
+    # return build_hough_space_fom_image(img)
+    return my_algorithm(img)
+
+
+##############################################################################
+##############################################################################
+##############################################################################
+##############################################################################
+##############################################################################
+##############################################################################
+##############################################################################
+
 
 # Curves generated by collinear points in the image space intersect in peaks (ρ,θ) in the Hough transform space. 
 # The more curves intersect at a point, the more “votes” a line in image space will receive. 
 
-ohough_space = build_hough_space_fom_image(BWimg).astype(np.uint8)
+ohough_space = algorithm(BWimg).astype(np.uint8)
 # print(ohough_space)
-# np.savetxt('test.out', ohough_space, delimiter=',')   # X is an array
+np.savetxt('test.out', ohough_space, delimiter=',')   # X is an array
 
 # get the equation with the highes votes
 print("getting highest votes")
-high_votelist = [(0, 0, 0)]*3
+high_votelist = [(0, 0, 0)]*3 # p/r, angle, votes
 # (p, angle, votes)
 angle_threshold = 30 # how similar can two angles be?
 vote_record = 0
 
-for p, angles in enumerate(ohough_space):
-    for angle, votes in enumerate(angles):
+#  key,value vvv
+for angle, distances in enumerate(ohough_space):
+    for distance, votes in enumerate(distances):
+        distance = distance - diagonal
         for idx, value in enumerate(high_votelist):
             if abs(angle - value[1]) < angle_threshold:
                 if votes > value[2]:
-                    high_votelist[idx] = (p, angle, votes)
+                    high_votelist[idx] = (distance, angle, votes)
                 break
         else: 
             # executed if the loop ended normally (no break) 
             if votes > vote_record:
-                high_votelist.insert(0, (p, angle, votes)) # append to beginning of array
+                high_votelist.insert(0, (distance, angle, votes)) # append to beginning of array
                 high_votelist.pop() # pop last element
                 vote_record = votes
 
 print("Highest voted is " + str(high_votelist))
 
+print("generating lines")
+
 ##vert_img = signal.correlate(imgArr, edge_filter_V)
 imgh = Image.fromarray(ohough_space.astype(np.uint8))
+# imgh = Image.open("Untitled.jpg")
 ##imgv = Image.fromarray(vert_img.astype(np.uint8))
+
+draw = ImageDraw.Draw(imgh)
+c = high_votelist[0][0]
+v = high_votelist[0][1]
+ellipseX = abs(cos(v)*c)
+ellipseY = abs(sin(v)*c)
+
+width = ohough_space.shape[0]
+height = ohough_space.shape[1]
+print(c, v)
+print(ellipseX, ellipseY)
+draw.ellipse([(ellipseX-10, ellipseY-10), (ellipseX+10, ellipseY+10)], fill='blue', outline='blue', width=3)
+
 imgh.show()
 ##imgv.show()

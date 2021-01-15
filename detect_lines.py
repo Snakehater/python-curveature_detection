@@ -5,7 +5,7 @@ from scipy import ndimage
 from scipy import signal
 from math import sin, cos, tan, pi, sqrt, ceil
 
-imageStr = "ONEPIX.jpg"
+imageStr = "Untitled.jpg"
 im = Image.open(imageStr)
 #imageArr = np.array(im)
 
@@ -60,50 +60,52 @@ for i, row in enumerate(horr_img):
 ##############################################################################
 ## hough space, ie line detection
 print("doing algorithm")
-# def build_hough_space_fom_image(img, shape = BWimg.shape, val = 1):
-#     hough_space = np.zeros(shape)
-#     for i, row in enumerate(img):
-#         for j, pixel in enumerate(row): 
-#             if pixel != val : 
-#                 continue
-#             print(pixel)
-#             hough_space = add_to_hough_space_polar((i,j), hough_space)
-#     return hough_space
-# def add_to_hough_space_polar(p, feature_space):
-#     space = np.linspace(0, pi, len(feature_space))
-#     d_max = len(feature_space[0]) / 2
-#     for i in range(len(space)):
-#         theta = space[i]
-#         d = int(p[0] * sin(theta) + p[1] * cos(theta)) + d_max
-#         if (d >= d_max * 2) : continue
-#         feature_space[i, int(d)] += 1
-#     return feature_space
-global diagonal
-def my_algorithm(img, shape = BWimg.shape, val = 1):
-    global diagonal
-    w = shape[0]
-    h = shape[0]
-    diagonal = ceil(sqrt(w**2 + h**2)) # diagonal will be used later and added to all distances to support a negative distance even inside array.
-    hough_space = np.zeros((360, diagonal * 2))
-    for x, column in enumerate(img): # iterate over x and get columns
-        for y, pixel in enumerate(column): # iterate over y and get rows of each column
-            if pixel > 0: # if there is a bright pixel:
-                print(pixel, "Is positive at x:", x, "y:", y)
-                hough_space = add_pixel_to_houghspace(x, y, hough_space, diagonal) # add to hough space
+def build_hough_space_fom_image(img, shape = BWimg.shape, val = 1):
+    hough_space = np.zeros(shape)
+    for i, row in enumerate(img):
+        for j, pixel in enumerate(row): 
+            if pixel != val : 
+                continue
+            print(pixel, i, j)
+            hough_space = add_to_hough_space_polar((j,i), hough_space)
     return hough_space
+def add_to_hough_space_polar(p, feature_space):
+    space = np.linspace(0, pi, len(feature_space))
+    d_max = len(feature_space[0]) / 2
+    for i in range(len(space)):
+        theta = space[i]
+        d = int(p[0] * sin(theta) + p[1] * cos(theta)) + d_max
+        if (d >= d_max * 2) : continue
+        feature_space[i, int(d)] += 1
+    return feature_space
 
-def add_pixel_to_houghspace(x, y, hough_space, diagonal):
-    for theta in range(360):
-        d = int(x * sin(theta) + y * cos(theta)) + diagonal
-        hough_space[theta, d] += 1 ## add one vote to that position in hough space
-        ## these votes will later give a spot in hough space where there are a lot of intersections
-    return hough_space
+
+# global diagonal
+# def my_algorithm(img, shape = BWimg.shape, val = 1):
+#     global diagonal
+#     w = shape[0]
+#     h = shape[0]
+#     diagonal = ceil(sqrt(w**2 + h**2)) # diagonal will be used later and added to all distances to support a negative distance even inside array.
+#     hough_space = np.zeros((360, diagonal * 2))
+#     for x, column in enumerate(img): # iterate over x and get columns
+#         for y, pixel in enumerate(column): # iterate over y and get rows of each column
+#             if pixel > 0: # if there is a bright pixel:
+#                 print(pixel, "Is positive at x:", x, "y:", y)
+#                 hough_space = add_pixel_to_houghspace(x, y, hough_space, diagonal) # add to hough space
+#     return hough_space
+
+# def add_pixel_to_houghspace(x, y, hough_space, diagonal):
+#     for theta in range(360):
+#         d = int(x * sin(theta) + y * cos(theta)) + diagonal
+#         hough_space[theta, d] += 1 ## add one vote to that position in hough space
+#         ## these votes will later give a spot in hough space where there are a lot of intersections
+#     return hough_space
 
 
 
 def algorithm(img):
-    # return build_hough_space_fom_image(img)
-    return my_algorithm(img)
+    return build_hough_space_fom_image(img)
+    # return my_algorithm(img)
 
 
 ##############################################################################
@@ -126,13 +128,14 @@ np.savetxt('test.out', ohough_space, delimiter=',')   # X is an array
 print("getting highest votes")
 high_votelist = [(0, 0, 0)]*3 # p/r, angle, votes
 # (p, angle, votes)
+print("p", "angle", "votes")
 angle_threshold = 30 # how similar can two angles be?
 vote_record = 0
 
 #  key,value vvv
 for angle, distances in enumerate(ohough_space):
     for distance, votes in enumerate(distances):
-        distance = distance - diagonal
+        # distance = distance - diagonal
         for idx, value in enumerate(high_votelist):
             if abs(angle - value[1]) < angle_threshold:
                 if votes > value[2]:
